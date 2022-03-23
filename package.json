@@ -2,6 +2,7 @@
   "name": "hw-app-kda",
   "version": "0.0.0",
   "description": "Ledger Hardware Wallet Kadena Application API",
+  "license": "Apache-2.0",
   "keywords": [
     "Ledger",
     "LedgerWallet",
@@ -28,7 +29,6 @@
   },
   "module": "lib-es/Kadena.js",
   "types": "lib/Kadena.d.ts",
-  "license": "Apache-2.0",
   "dependencies": {
     "@ledgerhq/hw-transport": "^6.3.0",
     "hw-app-obsidian-common": "git+http://github.com/obsidiansystems/hw-app-obsidian-common#9fd33f6218f34c0e3a7da96b63656a2b3ae76e95"
