@@ -1,3 +1,4 @@
-## 0.0~pre
+## 0.1.0
 
-Doesn't yet work, but want make sure dev ops works.
+* Add support for "signHash" APDU
+* Export basic functionality from hw-app-obsidian-common: "getPublicKey", "signTransaction", "getVersion"
