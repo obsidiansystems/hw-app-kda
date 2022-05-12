@@ -31,7 +31,7 @@
   "types": "lib/Kadena.d.ts",
   "dependencies": {
     "@ledgerhq/hw-transport": "^6.3.0",
-    "hw-app-obsidian-common": "git+http://github.com/obsidiansystems/hw-app-obsidian-common#9fd33f6218f34c0e3a7da96b63656a2b3ae76e95"
+    "hw-app-obsidian-common": "git+http://github.com/obsidiansystems/hw-app-obsidian-common#46376b351e3f917976c9cad880f6bf9dd1bc9392"
   },
   "scripts": {
     "build": "tsc && tsc -m ES6 --outDir lib-es",
