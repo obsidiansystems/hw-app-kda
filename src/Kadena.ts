@@ -15,7 +15,7 @@
  *  limitations under the License.
  ********************************************************************************/
 import type Transport from "@ledgerhq/hw-transport";
-import { Common, GetPublicKeyResult, SignTransactionResult, GetVersionResult } from "hw-app-obsidian-common";
+import { Common, GetPublicKeyResult, SignTransactionResult, GetVersionResult, buildBip32KeyPayload, splitPath } from "hw-app-obsidian-common";
 
 export { GetPublicKeyResult, SignTransactionResult, GetVersionResult };
 
@@ -31,6 +31,35 @@ export default class Kadena extends Common {
   
   constructor(transport: Transport) {
     super(transport, "KDA");
+  }
+
+  /**
+    * Sign a transaction with the key at a BIP32 path.
+    *
+    * @param txn - The transaction; this can be any of a node Buffer, Uint8Array, or a hexadecimal string, encoding the form of the transaction appropriate for hashing and signing.
+    * @param path - the path to use when signing the transaction.
+    */
+  async signHash(
+    path: string,
+    hash: string | Buffer | Uint8Array,
+  ): Promise<SignTransactionResult> {
+    const paths = splitPath(path);
+    const cla = 0x00;
+    const ins = 0x04;
+    const p1 = 0;
+    const p2 = 0;
+    const rawHash = typeof hash == "string" ? Buffer.from(hash, "hex") : Buffer.from(hash);
+    // Bip32key payload same as getPublicKey
+    const bip32KeyPayload = buildBip32KeyPayload(path);
+    // These are just squashed together
+    const payload = Buffer.concat([rawHash, bip32KeyPayload])
+    // TODO batch this since the payload length can be uint32le.max long
+    const response = await this.sendChunks(cla, ins, p1, p2, payload);
+    // TODO check this
+    const signature = response.slice(0,-2).toString("hex");
+    return {
+      signature,
+    };
   }
 }
 

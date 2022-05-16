@@ -130,3 +130,23 @@ for version 0.1.0, it produces something like
 
 Returns **[Promise](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Promise)&lt;{[object](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Object)}>** an object with major, minor, and patch of the version.
 
+
+### signHash
+
+Sign any arbitrary hash with a given BIP-32 path.
+This requires Kadena Ledger app v0.1.1 above, and hash signing must be enabled from the settings menu.
+
+#### Parameters
+
+-   `path` **[string](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/String)** a path in BIP-32 format
+
+#### Examples
+
+```javascript
+const publicKey = await kadena.signHash(
+  "44'/626'/0'/0/0",
+  "<hash, encoded as a hex string of length 64>"
+  );
+```
+
+Returns **[Promise](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Promise)&lt;[object](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object)>** an object with text field containing a signature.
