@@ -48,7 +48,8 @@ export default class Kadena extends Common {
     const ins = 0x04;
     const p1 = 0;
     const p2 = 0;
-    const rawHash = typeof hash == "string" ? Buffer.from(hash, "hex") : Buffer.from(hash);
+    const rawHash = typeof hash == "string" ?
+      (hash.length == 64 ? Buffer.from(hash, "hex") : Buffer.from(hash, "base64")) : Buffer.from(hash);
     // Bip32key payload same as getPublicKey
     const bip32KeyPayload = buildBip32KeyPayload(path);
     // These are just squashed together
