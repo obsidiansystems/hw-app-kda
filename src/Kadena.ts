@@ -34,9 +34,9 @@ export default class Kadena extends Common {
   }
 
   /**
-    * Sign a transaction with the key at a BIP32 path.
+    * Sign a transaction hash with the key at a BIP32 path.
     *
-    * @param txn - The transaction; this can be any of a node Buffer, Uint8Array, or a hexadecimal string, encoding the form of the transaction appropriate for hashing and signing.
+    * @param hash - The transaction hash; this can be any of a node Buffer, Uint8Array, a hexadecimal string, or a base64 encoded string.
     * @param path - the path to use when signing the transaction.
     */
   async signHash(
@@ -54,9 +54,7 @@ export default class Kadena extends Common {
     const bip32KeyPayload = buildBip32KeyPayload(path);
     // These are just squashed together
     const payload = Buffer.concat([rawHash, bip32KeyPayload])
-    // TODO batch this since the payload length can be uint32le.max long
     const response = await this.sendChunks(cla, ins, p1, p2, payload);
-    // TODO check this
     const signature = response.slice(0,-2).toString("hex");
     return {
       signature,
