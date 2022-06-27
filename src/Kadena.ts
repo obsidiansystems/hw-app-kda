@@ -50,15 +50,19 @@ export default class Kadena extends Common {
     const p2 = 0;
     const rawHash = typeof hash == "string" ?
       (hash.length == 64 ? Buffer.from(hash, "hex") : Buffer.from(hash, "base64")) : Buffer.from(hash);
-    // Bip32key payload same as getPublicKey
-    const bip32KeyPayload = buildBip32KeyPayload(path);
-    // These are just squashed together
-    const payload = Buffer.concat([rawHash, bip32KeyPayload])
-    const response = await this.sendChunks(cla, ins, p1, p2, payload);
-    const signature = response.slice(0,-2).toString("hex");
-    return {
-      signature,
-    };
+    if (rawHash.length != 32) {
+      throw new TypeError("Hash is not 32 bytes");
+    } else {
+      // Bip32key payload same as getPublicKey
+      const bip32KeyPayload = buildBip32KeyPayload(path);
+      // These are just squashed together
+      const payload = Buffer.concat([rawHash, bip32KeyPayload])
+      const response = await this.sendChunks(cla, ins, p1, p2, payload);
+      const signature = response.slice(0,-2).toString("hex");
+      return {
+        signature,
+      };
+    }
   }
 }
 
