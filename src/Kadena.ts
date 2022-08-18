@@ -15,7 +15,7 @@
  *  limitations under the License.
  ********************************************************************************/
 import type Transport from "@ledgerhq/hw-transport";
-import { Common, GetPublicKeyResult, SignTransactionResult, GetVersionResult, buildBip32KeyPayload, splitPath } from "hw-app-obsidian-common";
+import { Common, GetPublicKeyResult, SignTransactionResult, GetVersionResult } from "hw-app-obsidian-common";
 
 export { GetPublicKeyResult, SignTransactionResult, GetVersionResult };
 
@@ -66,3 +66,35 @@ export default class Kadena extends Common {
   }
 }
 
+// TODO: Use splitPath and buildBip32KeyPayload from hw-app-obsidian-common
+function splitPath(path: string): number[] {
+  const result: number[] = [];
+  const components = path.split("/");
+  components.forEach((element) => {
+    let number = parseInt(element, 10);
+
+    if (isNaN(number)) {
+      return; // FIXME shouldn't it throws instead?
+    }
+
+    if (element.length > 1 && element[element.length - 1] === "'") {
+      number += 0x80000000;
+    }
+
+    result.push(number);
+  });
+  return result;
+}
+
+function buildBip32KeyPayload(path: string): Buffer {
+  const paths = splitPath(path);
+  // Bip32Key payload is:
+  // 1 byte with number of elements in u32 array path
+  // Followed by the u32 array itself
+  const payload = Buffer.alloc(1 + paths.length * 4);
+  payload[0] = paths.length
+  paths.forEach((element, index) => {
+    payload.writeUInt32LE(element, 1 + 4 * index);
+  });
+  return payload
+}
