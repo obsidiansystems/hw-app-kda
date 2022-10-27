@@ -19,6 +19,28 @@ import { Common, GetPublicKeyResult, SignTransactionResult, GetVersionResult } f
 
 export { GetPublicKeyResult, SignTransactionResult, GetVersionResult };
 
+export interface TransferTxParams {
+  path?: string,
+  recipient: string,
+  amount: string,
+  chainId: number,
+  network: string,
+  gasPrice?: string,
+  gasLimit?: string,
+  creationTime?: number,
+  ttl?: string, // Could be decimal
+  nonce?: string,
+}
+
+export interface TransferCrossChainTxParams extends TransferTxParams {
+  recipient_chainId: number,
+}
+
+export interface BuildTransactionResult extends SignTransactionResult {
+  pubkey: string,
+  cmd: string,
+};
+
 /**
  * Kadena API
  *
@@ -64,6 +86,128 @@ export default class Kadena extends Common {
       };
     }
   }
+
+  /**
+    * Sign a transfer transaction and returns the signature, the public key of the signer, and the 'cmd' JSON.
+    *
+    * @params TransferTxParams - The parameters used to construct the transaction.
+    */
+  async signTransferTx(
+    params: TransferTxParams
+  ): Promise<BuildTransactionResult> {
+    var p1 = params as TransferCrossChainTxParams;
+    p1.recipient_chainId = 0; // Ignored by Ledger App
+    const signature = await this.signTxInternal(p1, 0);
+    return signature;
+  }
+
+  /**
+   * Sign a transfer-create transaction and returns the signature, the public key of the signer, and the 'cmd' JSON.
+   *
+   * @params TransferTxParams - The parameters used to construct the transaction.
+   */
+  async signTransferCreateTx(
+    params: TransferTxParams
+  ): Promise<BuildTransactionResult> {
+    var p1 = params as TransferCrossChainTxParams;
+    p1.recipient_chainId = 0; // Ignored by Ledger App
+    const signature = await this.signTxInternal(p1, 1);
+    return signature;
+  }
+
+  /**
+   * Sign a cross-chain transfer transaction and returns the signature, the public key of the signer, and the 'cmd' JSON.
+   *
+   * @params TransferCrossChainTxParams - The parameters used to construct the transaction.
+   */
+  async signTransferCrossChainTx(
+    params: TransferCrossChainTxParams
+  ): Promise<BuildTransactionResult> {
+    const signature = await this.signTxInternal(params, 2);
+    return signature;
+  }
+
+  private async signTxInternal(
+    params: TransferCrossChainTxParams,
+    txType
+  ): Promise<BuildTransactionResult> {
+    // Use defaults if value not specified
+    const t: Date = new Date();
+    const path = params.path === undefined? "44'/626'/0'/0/0": params.path;
+    const recipient = params.recipient.startsWith('k:') ? params.recipient.substring(2) : params.recipient;
+    const gasPrice = params.gasPrice === undefined? "1.0e-6": params.gasPrice;
+    const gasLimit = params.gasLimit === undefined? "2300" : params.gasLimit;
+    const creationTime = params.creationTime === undefined? Math.floor(t.getTime() / 1000) : params.creationTime;
+    const ttl = params.ttl === undefined? "600" : params.ttl;
+    const nonce = params.nonce === undefined? t.toISOString(): params.nonce;
+    // Do APDU call
+    const paths = splitPath(path);
+    const cla = 0x00;
+    const ins = 0x10;
+    const p1 = 0;
+    const p2 = 0;
+    const txTypeB = Buffer.alloc(1);
+    txTypeB.writeInt8(txType);
+    // These are just squashed together
+    const payload = Buffer.concat(
+      [ buildBip32KeyPayload(path)
+       , txTypeB
+       , textPayload(recipient)
+       , textPayload(params.recipient_chainId.toString())
+       , textPayload(params.network)
+       , textPayload(params.amount)
+       , textPayload(gasPrice)
+       , textPayload(gasLimit)
+       , textPayload(creationTime.toString())
+       , textPayload(params.chainId.toString())
+       , textPayload(nonce)
+       , textPayload(ttl)
+      ])
+    const response = await this.sendChunks(cla, ins, p1, p2, payload);
+    const signature = response.slice(0,64).toString("hex");
+    const pubkey = response.slice(64,96).toString("hex");
+
+    // Build the JSON, exactly like the Ledger app
+    var cmd = "{\"networkId\":\"" + params.network + "\"";
+    if (txType == 0) {
+      cmd += ",\"payload\":{\"exec\":{\"data\":{},\"code\":\"";
+      cmd += "(coin.transfer \\\"k:" + pubkey + "\\\"";
+      cmd += " \\\"k:" + recipient + "\\\"";
+      cmd += " " + params.amount + ")\"}}";
+      cmd += ",\"signers\":[{\"pubKey\":\"" + pubkey + "\"";
+      cmd += ",\"clist\":[{\"args\":[\"k:" + pubkey + "\",\"k:" + recipient + "\"," + params.amount + "],\"name\":\"coin.TRANSFER\"},{\"args\":[],\"name\":\"coin.GAS\"}]}]";
+    } else if (txType == 1) {
+      cmd += ",\"payload\":{\"exec\":{\"data\":{";
+      cmd += "\"ks\":{\"pred\":\"keys-all\",\"keys\":[\"" + recipient + "\"]}";
+      cmd += "},\"code\":\"";
+      cmd += "(coin.transfer-create \\\"k:" + pubkey + "\\\"";
+      cmd += " \\\"k:" + recipient + "\\\"";
+      cmd += " (read-keyset \\\"ks\\\")";
+      cmd += " " + params.amount + ")\"}}";
+      cmd += ",\"signers\":[{\"pubKey\":\"" + pubkey + "\"";
+      cmd += ",\"clist\":[{\"args\":[\"k:" + pubkey + "\",\"k:" + recipient + "\"," + params.amount + "],\"name\":\"coin.TRANSFER\"},{\"args\":[],\"name\":\"coin.GAS\"}]}]";
+    } else {
+      cmd += ",\"payload\":{\"exec\":{\"data\":{";
+      cmd += "\"ks\":{\"pred\":\"keys-all\",\"keys\":[\"" + recipient + "\"]}";
+      cmd += "},\"code\":\"";
+      cmd += "(coin.transfer-crosschain \\\"k:" + pubkey + "\\\"";
+      cmd += " \\\"k:" + recipient + "\\\"";
+      cmd += " (read-keyset \\\"ks\\\")";
+      cmd += " \\\"" + params.recipient_chainId.toString() + "\\\"";
+      cmd += " " + params.amount + ")\"}}";
+      cmd += ",\"signers\":[{\"pubKey\":\"" + pubkey + "\"";
+      cmd += ",\"clist\":[{\"args\":[\"k:" + pubkey + "\",\"k:" + recipient + "\"," + params.amount + ",\"" + params.recipient_chainId.toString() + "\"],\"name\":\"coin.TRANSFER_XCHAIN\"},{\"args\":[],\"name\":\"coin.GAS\"}]}]";
+    }
+    cmd += ",\"meta\":{\"creationTime\":" + creationTime.toString();
+    cmd += ",\"ttl\":" + ttl + ",\"gasLimit\":" + gasLimit + ",\"chainId\":\"" + params.chainId.toString() + "\"";
+    cmd += ",\"gasPrice\":" + gasPrice + ",\"sender\":\"k:" + pubkey + "\"},\"nonce\":\"" + nonce + "\"}";
+
+    return {
+      signature,
+      pubkey,
+      cmd,
+    };
+  }
 }
 
 // TODO: Use splitPath and buildBip32KeyPayload from hw-app-obsidian-common
@@ -98,3 +242,12 @@ function buildBip32KeyPayload(path: string): Buffer {
   });
   return payload
 }
+
+function textPayload(txt: string): Buffer {
+  // 1 byte: length
+  const payload = Buffer.alloc(1 + txt.length);
+  payload[0] = txt.length
+  payload.write(txt, 1, "utf-8");
+  return payload
+}
+
