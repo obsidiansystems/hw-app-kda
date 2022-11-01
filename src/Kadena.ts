@@ -16,8 +16,9 @@
  ********************************************************************************/
 import type Transport from "@ledgerhq/hw-transport";
 import { Common, GetPublicKeyResult, SignTransactionResult, GetVersionResult } from "hw-app-obsidian-common";
+import blake2b from "blake2b";
 
-export { GetPublicKeyResult, SignTransactionResult, GetVersionResult };
+export { GetPublicKeyResult, SignTransactionResult, GetVersionResult, blake2b };
 
 export interface TransferTxParams {
   path?: string,
@@ -36,10 +37,21 @@ export interface TransferCrossChainTxParams extends TransferTxParams {
   recipient_chainId: number,
 }
 
-export interface BuildTransactionResult extends SignTransactionResult {
+export interface BuildTransactionResult {
   pubkey: string,
-  cmd: string,
+  pact_command: PactCommandObject,
 };
+
+export interface PactCommandObject {
+  cmd: string,
+  hash: string,
+  sigs: PactCommandSig[],
+};
+
+export interface PactCommandSig {
+  sig: string,
+};
+
 
 /**
  * Kadena API
@@ -97,8 +109,7 @@ export default class Kadena extends Common {
   ): Promise<BuildTransactionResult> {
     var p1 = params as TransferCrossChainTxParams;
     p1.recipient_chainId = 0; // Ignored by Ledger App
-    const signature = await this.signTxInternal(p1, 0);
-    return signature;
+    return await this.signTxInternal(p1, 0);
   }
 
   /**
@@ -111,8 +122,7 @@ export default class Kadena extends Common {
   ): Promise<BuildTransactionResult> {
     var p1 = params as TransferCrossChainTxParams;
     p1.recipient_chainId = 0; // Ignored by Ledger App
-    const signature = await this.signTxInternal(p1, 1);
-    return signature;
+    return await this.signTxInternal(p1, 1);
   }
 
   /**
@@ -123,8 +133,7 @@ export default class Kadena extends Common {
   async signTransferCrossChainTx(
     params: TransferCrossChainTxParams
   ): Promise<BuildTransactionResult> {
-    const signature = await this.signTxInternal(params, 2);
-    return signature;
+    return await this.signTxInternal(params, 2);
   }
 
   private async signTxInternal(
@@ -203,10 +212,16 @@ export default class Kadena extends Common {
     cmd += ",\"ttl\":" + ttl + ",\"gasLimit\":" + gasLimit + ",\"chainId\":\"" + params.chainId.toString() + "\"";
     cmd += ",\"gasPrice\":" + gasPrice + ",\"sender\":\"k:" + pubkey + "\"},\"nonce\":\"" + nonce + "\"}";
 
+    var hash_bytes = blake2b(32).update(Buffer.from(cmd, "utf-8")).digest();
+    // base64url encode, remove padding
+    var hash = Buffer.from(hash_bytes).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
     return {
-      signature,
       pubkey,
-      cmd,
+      pact_command: {
+        cmd,
+        hash,
+        sigs: [{sig: signature}],
+      }
     };
   }
 }
