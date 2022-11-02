@@ -134,7 +134,7 @@ Returns **[Promise](https://developer.mozilla.org/docs/Web/JavaScript/Reference/
 ### signHash
 
 Sign any arbitrary hash with a given BIP-32 path.
-This requires Kadena Ledger app v0.1.1 above, and hash signing must be enabled from the settings menu.
+This requires Kadena Ledger app v0.2.1 above, and hash signing must be enabled from the settings menu.
 
 #### Parameters
 
