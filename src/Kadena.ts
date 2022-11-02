@@ -135,6 +135,7 @@ export default class Kadena extends Common {
     const t: Date = new Date();
     const path = params.path === undefined? "44'/626'/0'/0/0": params.path;
     const recipient = params.recipient.startsWith('k:') ? params.recipient.substring(2) : params.recipient;
+    const amount = convertDecimal(params.amount);
     const gasPrice = params.gasPrice === undefined? "1.0e-6": params.gasPrice;
     const gasLimit = params.gasLimit === undefined? "2300" : params.gasLimit;
     const creationTime = params.creationTime === undefined? Math.floor(t.getTime() / 1000) : params.creationTime;
@@ -155,7 +156,7 @@ export default class Kadena extends Common {
        , textPayload(recipient)
        , textPayload(params.recipient_chainId.toString())
        , textPayload(params.network)
-       , textPayload(params.amount)
+       , textPayload(amount)
        , textPayload(gasPrice)
        , textPayload(gasLimit)
        , textPayload(creationTime.toString())
@@ -173,9 +174,9 @@ export default class Kadena extends Common {
       cmd += ",\"payload\":{\"exec\":{\"data\":{},\"code\":\"";
       cmd += "(coin.transfer \\\"k:" + pubkey + "\\\"";
       cmd += " \\\"k:" + recipient + "\\\"";
-      cmd += " " + params.amount + ")\"}}";
+      cmd += " " + amount + ")\"}}";
       cmd += ",\"signers\":[{\"pubKey\":\"" + pubkey + "\"";
-      cmd += ",\"clist\":[{\"args\":[\"k:" + pubkey + "\",\"k:" + recipient + "\"," + params.amount + "],\"name\":\"coin.TRANSFER\"},{\"args\":[],\"name\":\"coin.GAS\"}]}]";
+      cmd += ",\"clist\":[{\"args\":[\"k:" + pubkey + "\",\"k:" + recipient + "\"," + amount + "],\"name\":\"coin.TRANSFER\"},{\"args\":[],\"name\":\"coin.GAS\"}]}]";
     } else if (txType == 1) {
       cmd += ",\"payload\":{\"exec\":{\"data\":{";
       cmd += "\"ks\":{\"pred\":\"keys-all\",\"keys\":[\"" + recipient + "\"]}";
@@ -183,9 +184,9 @@ export default class Kadena extends Common {
       cmd += "(coin.transfer-create \\\"k:" + pubkey + "\\\"";
       cmd += " \\\"k:" + recipient + "\\\"";
       cmd += " (read-keyset \\\"ks\\\")";
-      cmd += " " + params.amount + ")\"}}";
+      cmd += " " + amount + ")\"}}";
       cmd += ",\"signers\":[{\"pubKey\":\"" + pubkey + "\"";
-      cmd += ",\"clist\":[{\"args\":[\"k:" + pubkey + "\",\"k:" + recipient + "\"," + params.amount + "],\"name\":\"coin.TRANSFER\"},{\"args\":[],\"name\":\"coin.GAS\"}]}]";
+      cmd += ",\"clist\":[{\"args\":[\"k:" + pubkey + "\",\"k:" + recipient + "\"," + amount + "],\"name\":\"coin.TRANSFER\"},{\"args\":[],\"name\":\"coin.GAS\"}]}]";
     } else {
       cmd += ",\"payload\":{\"exec\":{\"data\":{";
       cmd += "\"ks\":{\"pred\":\"keys-all\",\"keys\":[\"" + recipient + "\"]}";
@@ -194,9 +195,9 @@ export default class Kadena extends Common {
       cmd += " \\\"k:" + recipient + "\\\"";
       cmd += " (read-keyset \\\"ks\\\")";
       cmd += " \\\"" + params.recipient_chainId.toString() + "\\\"";
-      cmd += " " + params.amount + ")\"}}";
+      cmd += " " + amount + ")\"}}";
       cmd += ",\"signers\":[{\"pubKey\":\"" + pubkey + "\"";
-      cmd += ",\"clist\":[{\"args\":[\"k:" + pubkey + "\",\"k:" + recipient + "\"," + params.amount + ",\"" + params.recipient_chainId.toString() + "\"],\"name\":\"coin.TRANSFER_XCHAIN\"},{\"args\":[],\"name\":\"coin.GAS\"}]}]";
+      cmd += ",\"clist\":[{\"args\":[\"k:" + pubkey + "\",\"k:" + recipient + "\"," + amount + ",\"" + params.recipient_chainId.toString() + "\"],\"name\":\"coin.TRANSFER_XCHAIN\"},{\"args\":[],\"name\":\"coin.GAS\"}]}]";
     }
     cmd += ",\"meta\":{\"creationTime\":" + creationTime.toString();
     cmd += ",\"ttl\":" + ttl + ",\"gasLimit\":" + gasLimit + ",\"chainId\":\"" + params.chainId.toString() + "\"";
@@ -249,5 +250,14 @@ function textPayload(txt: string): Buffer {
   payload[0] = txt.length
   payload.write(txt, 1, "utf-8");
   return payload
+}
+
+const convertDecimal = (decimal) => {
+  decimal = decimal.toString();
+  if (decimal.includes('.')) { return decimal }
+  if ((decimal / Math.floor(decimal)) === 1) {
+    decimal = decimal + ".0"
+  }
+  return decimal
 }
 
