@@ -133,6 +133,8 @@ export default class Kadena extends Common {
   async signTransferCrossChainTx(
     params: TransferCrossChainTxParams
   ): Promise<BuildTransactionResult> {
+    if (params.chainId == params.recipient_chainId)
+      throw new TypeError("Recipient chainId is same as sender's in a cross-chain transfer");
     return await this.signTxInternal(params, 2);
   }
 
@@ -142,13 +144,31 @@ export default class Kadena extends Common {
   ): Promise<BuildTransactionResult> {
     // Use defaults if value not specified
     const t: Date = new Date();
+
     const path = params.path === undefined? "44'/626'/0'/0/0": params.path;
+    if (!(path.startsWith("44'/626'/") || path.startsWith("m/44'/626'/")))
+      throw new TypeError("Path does not start with `44'/626'/` or `m/44'/626'/`");
+
     const recipient = params.recipient.startsWith('k:') ? params.recipient.substring(2) : params.recipient;
+    if (!recipient.match(/[0-9A-Fa-f]{64}/g))
+      throw new TypeError("Recipient should be a hex encoded pubkey or 'k:' address");
+
+    let isNaN_ = (v) => {
+      if (v === undefined) return false;
+      return (isNaN(v as unknown as number));
+    }
+    if (isNaN_(params.amount)) throw new TypeError("amount is non a number");
+    if (isNaN_(params.gasPrice)) throw new TypeError("gasPrice is non a number");
+    if (isNaN_(params.gasLimit)) throw new TypeError("gasLimit is non a number");
+    if (isNaN_(params.creationTime)) throw new TypeError("creationTime is non a number");
+    if (isNaN_(params.ttl)) throw new TypeError("ttl is non a number");
+
     const amount = convertDecimal(params.amount);
     const gasPrice = params.gasPrice === undefined? "1.0e-6": params.gasPrice;
     const gasLimit = params.gasLimit === undefined? "2300" : params.gasLimit;
     const creationTime = params.creationTime === undefined? Math.floor(t.getTime() / 1000) : params.creationTime;
     const ttl = params.ttl === undefined? "600" : params.ttl;
+
     const nonce = params.nonce === undefined? t.toISOString(): params.nonce;
     // Do APDU call
     const paths = splitPath(path);
