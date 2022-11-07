@@ -126,6 +126,16 @@ An **[object][#object]>** containing the following fields
 
   Signing key's derivation path in BIP-32 format. Must be of the format `"44'/626'/<account>'/<change>/<address_index>"` 
 
+- `namespace` **[string][#string]** (Optional, default value = "")
+
+  Token namespace, example: `free`
+  If the `namespace` is specified then the `module` must also be specified.
+
+- `module` **[string][#string]** (Optional, default value = "")
+
+  Token module, example: `anedak`
+  If the `module` is specified then the `namespace` must also be specified.
+
 - `gasPrice` **[string][#string]** (Optional, default value = "1.0e-6")
 
 - `gasLimit` **[string][#string]** (Optional, default value = "2300")
