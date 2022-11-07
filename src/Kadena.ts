@@ -22,6 +22,8 @@ export { GetPublicKeyResult, SignTransactionResult, GetVersionResult, blake2b };
 
 export interface TransferTxParams {
   path?: string,
+  namespace?: string,
+  module?: string,
   recipient: string,
   amount: string,
   chainId: number,
@@ -100,9 +102,10 @@ export default class Kadena extends Common {
   }
 
   /**
-    * Sign a transfer transaction and returns the signature, the public key of the signer, and the 'cmd' JSON.
+    * Sign a transfer transaction.
     *
-    * @params TransferTxParams - The parameters used to construct the transaction.
+    * @param params - The `TransferTxParams` parameters used to construct the transaction.
+    * @returns the signed Pact Command and the public key of the signer.
     */
   async signTransferTx(
     params: TransferTxParams
@@ -113,9 +116,10 @@ export default class Kadena extends Common {
   }
 
   /**
-   * Sign a transfer-create transaction and returns the signature, the public key of the signer, and the 'cmd' JSON.
+   * Sign a transfer-create transaction.
    *
-   * @params TransferTxParams - The parameters used to construct the transaction.
+   * @param params - The `TransferTxParams` parameters used to construct the transaction.
+   * @returns the signed Pact Command and the public key of the signer.
    */
   async signTransferCreateTx(
     params: TransferTxParams
@@ -126,9 +130,10 @@ export default class Kadena extends Common {
   }
 
   /**
-   * Sign a cross-chain transfer transaction and returns the signature, the public key of the signer, and the 'cmd' JSON.
+   * Sign a cross-chain transfer transaction.
    *
-   * @params TransferCrossChainTxParams - The parameters used to construct the transaction.
+   * @param params - The `TransferCrossChainTxParams` parameters used to construct the transaction.
+   * @returns the signed Pact Command and the public key of the signer.
    */
   async signTransferCrossChainTx(
     params: TransferCrossChainTxParams
@@ -152,6 +157,10 @@ export default class Kadena extends Common {
     const recipient = params.recipient.startsWith('k:') ? params.recipient.substring(2) : params.recipient;
     if (!recipient.match(/[0-9A-Fa-f]{64}/g))
       throw new TypeError("Recipient should be a hex encoded pubkey or 'k:' address");
+
+    const namespace_ = params.namespace === undefined? "": params.namespace;
+    const module_ = params.module === undefined? "": params.module;
+    if (namespace_ != "" && module_ == "") throw new TypeError("Along with 'namespace' 'module' need to be specified");
 
     let isNaN_ = (v) => {
       if (v === undefined) return false;
@@ -186,6 +195,8 @@ export default class Kadena extends Common {
        , textPayload(params.recipient_chainId.toString())
        , textPayload(params.network)
        , textPayload(amount)
+       , textPayload(namespace_)
+       , textPayload(module_)
        , textPayload(gasPrice)
        , textPayload(gasLimit)
        , textPayload(creationTime.toString())
@@ -201,32 +212,62 @@ export default class Kadena extends Common {
     var cmd = "{\"networkId\":\"" + params.network + "\"";
     if (txType == 0) {
       cmd += ",\"payload\":{\"exec\":{\"data\":{},\"code\":\"";
-      cmd += "(coin.transfer \\\"k:" + pubkey + "\\\"";
+      if (namespace_ == "") {
+        cmd += "(coin.transfer";
+      } else {
+        cmd += "(" + namespace_ + "." + module_ + ".transfer";
+      }
+      cmd += " \\\"k:" + pubkey + "\\\"";
       cmd += " \\\"k:" + recipient + "\\\"";
       cmd += " " + amount + ")\"}}";
       cmd += ",\"signers\":[{\"pubKey\":\"" + pubkey + "\"";
-      cmd += ",\"clist\":[{\"args\":[\"k:" + pubkey + "\",\"k:" + recipient + "\"," + amount + "],\"name\":\"coin.TRANSFER\"},{\"args\":[],\"name\":\"coin.GAS\"}]}]";
+      cmd += ",\"clist\":[{\"args\":[\"k:" + pubkey + "\",\"k:" + recipient + "\"," + amount + "]"
+      if (namespace_ == "") {
+        cmd += ",\"name\":\"coin.TRANSFER\"},{\"args\":[],\"name\":\"coin.GAS\"}]}]";
+      } else {
+        cmd += ",\"name\":\"" + namespace_ + "." + module_ + ".TRANSFER\"},{\"args\":[],\"name\":\"coin.GAS\"}]}]";
+      }
     } else if (txType == 1) {
       cmd += ",\"payload\":{\"exec\":{\"data\":{";
       cmd += "\"ks\":{\"pred\":\"keys-all\",\"keys\":[\"" + recipient + "\"]}";
       cmd += "},\"code\":\"";
-      cmd += "(coin.transfer-create \\\"k:" + pubkey + "\\\"";
+      if (namespace_ == "") {
+        cmd += "(coin.transfer-create";
+      } else {
+        cmd += "(" + namespace_ + "." + module_ + ".transfer-create";
+      }
+      cmd += " \\\"k:" + pubkey + "\\\"";
       cmd += " \\\"k:" + recipient + "\\\"";
       cmd += " (read-keyset \\\"ks\\\")";
       cmd += " " + amount + ")\"}}";
       cmd += ",\"signers\":[{\"pubKey\":\"" + pubkey + "\"";
-      cmd += ",\"clist\":[{\"args\":[\"k:" + pubkey + "\",\"k:" + recipient + "\"," + amount + "],\"name\":\"coin.TRANSFER\"},{\"args\":[],\"name\":\"coin.GAS\"}]}]";
+      cmd += ",\"clist\":[{\"args\":[\"k:" + pubkey + "\",\"k:" + recipient + "\"," + amount + "]"
+      if (namespace_ == "") {
+        cmd += ",\"name\":\"coin.TRANSFER\"},{\"args\":[],\"name\":\"coin.GAS\"}]}]";
+      } else {
+        cmd += ",\"name\":\"" + namespace_ + "." + module_ + ".TRANSFER\"},{\"args\":[],\"name\":\"coin.GAS\"}]}]";
+      }
     } else {
       cmd += ",\"payload\":{\"exec\":{\"data\":{";
       cmd += "\"ks\":{\"pred\":\"keys-all\",\"keys\":[\"" + recipient + "\"]}";
       cmd += "},\"code\":\"";
-      cmd += "(coin.transfer-crosschain \\\"k:" + pubkey + "\\\"";
+      if (namespace_ == "") {
+        cmd += "(coin.transfer-crosschain";
+      } else {
+        cmd += "(" + namespace_ + "." + module_ + ".transfer-crosschain";
+      }
+      cmd += " \\\"k:" + pubkey + "\\\"";
       cmd += " \\\"k:" + recipient + "\\\"";
       cmd += " (read-keyset \\\"ks\\\")";
       cmd += " \\\"" + params.recipient_chainId.toString() + "\\\"";
       cmd += " " + amount + ")\"}}";
       cmd += ",\"signers\":[{\"pubKey\":\"" + pubkey + "\"";
-      cmd += ",\"clist\":[{\"args\":[\"k:" + pubkey + "\",\"k:" + recipient + "\"," + amount + ",\"" + params.recipient_chainId.toString() + "\"],\"name\":\"coin.TRANSFER_XCHAIN\"},{\"args\":[],\"name\":\"coin.GAS\"}]}]";
+      cmd += ",\"clist\":[{\"args\":[\"k:" + pubkey + "\",\"k:" + recipient + "\"," + amount + ",\"" + params.recipient_chainId.toString() + "\"]";
+      if (namespace_ == "") {
+        cmd += ",\"name\":\"coin.TRANSFER_XCHAIN\"},{\"args\":[],\"name\":\"coin.GAS\"}]}]";
+      } else {
+        cmd += ",\"name\":\"" + namespace_ + "." + module_ + ".TRANSFER_XCHAIN\"},{\"args\":[],\"name\":\"coin.GAS\"}]}]";
+      }
     }
     cmd += ",\"meta\":{\"creationTime\":" + creationTime.toString();
     cmd += ",\"ttl\":" + ttl + ",\"gasLimit\":" + gasLimit + ",\"chainId\":\"" + params.chainId.toString() + "\"";
