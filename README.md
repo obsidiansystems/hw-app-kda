@@ -134,7 +134,7 @@ An **[object][#object]>** containing the following fields
 
 - `ttl` **[string][#string]** (Optional, default value = "600")
 
-- `nonce` **[string][#string]** (Optional, default value = current time in UTC as string)
+- `nonce` **[string][#string]** (Optional, default value = "")
 
 
 #### Examples

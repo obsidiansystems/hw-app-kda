@@ -169,7 +169,7 @@ export default class Kadena extends Common {
     const creationTime = params.creationTime === undefined? Math.floor(t.getTime() / 1000) : params.creationTime;
     const ttl = params.ttl === undefined? "600" : params.ttl;
 
-    const nonce = params.nonce === undefined? t.toISOString(): params.nonce;
+    const nonce = params.nonce === undefined? "": params.nonce;
     // Do APDU call
     const paths = splitPath(path);
     const cla = 0x00;
