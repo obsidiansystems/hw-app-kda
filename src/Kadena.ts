@@ -16,11 +16,14 @@
  ********************************************************************************/
 import type Transport from "@ledgerhq/hw-transport";
 import { Common, GetPublicKeyResult, SignTransactionResult, GetVersionResult } from "hw-app-obsidian-common";
+import blake2b from "blake2b";
 
-export { GetPublicKeyResult, SignTransactionResult, GetVersionResult };
+export { GetPublicKeyResult, SignTransactionResult, GetVersionResult, blake2b };
 
 export interface TransferTxParams {
   path?: string,
+  namespace?: string,
+  module?: string,
   recipient: string,
   amount: string,
   chainId: number,
@@ -36,10 +39,21 @@ export interface TransferCrossChainTxParams extends TransferTxParams {
   recipient_chainId: number,
 }
 
-export interface BuildTransactionResult extends SignTransactionResult {
+export interface BuildTransactionResult {
   pubkey: string,
-  cmd: string,
+  pact_command: PactCommandObject,
 };
+
+export interface PactCommandObject {
+  cmd: string,
+  hash: string,
+  sigs: PactCommandSig[],
+};
+
+export interface PactCommandSig {
+  sig: string,
+};
+
 
 /**
  * Kadena API
@@ -88,43 +102,45 @@ export default class Kadena extends Common {
   }
 
   /**
-    * Sign a transfer transaction and returns the signature, the public key of the signer, and the 'cmd' JSON.
+    * Sign a transfer transaction.
     *
-    * @params TransferTxParams - The parameters used to construct the transaction.
+    * @param params - The `TransferTxParams` parameters used to construct the transaction.
+    * @returns the signed Pact Command and the public key of the signer.
     */
   async signTransferTx(
     params: TransferTxParams
   ): Promise<BuildTransactionResult> {
     var p1 = params as TransferCrossChainTxParams;
     p1.recipient_chainId = 0; // Ignored by Ledger App
-    const signature = await this.signTxInternal(p1, 0);
-    return signature;
+    return await this.signTxInternal(p1, 0);
   }
 
   /**
-   * Sign a transfer-create transaction and returns the signature, the public key of the signer, and the 'cmd' JSON.
+   * Sign a transfer-create transaction.
    *
-   * @params TransferTxParams - The parameters used to construct the transaction.
+   * @param params - The `TransferTxParams` parameters used to construct the transaction.
+   * @returns the signed Pact Command and the public key of the signer.
    */
   async signTransferCreateTx(
     params: TransferTxParams
   ): Promise<BuildTransactionResult> {
     var p1 = params as TransferCrossChainTxParams;
     p1.recipient_chainId = 0; // Ignored by Ledger App
-    const signature = await this.signTxInternal(p1, 1);
-    return signature;
+    return await this.signTxInternal(p1, 1);
   }
 
   /**
-   * Sign a cross-chain transfer transaction and returns the signature, the public key of the signer, and the 'cmd' JSON.
+   * Sign a cross-chain transfer transaction.
    *
-   * @params TransferCrossChainTxParams - The parameters used to construct the transaction.
+   * @param params - The `TransferCrossChainTxParams` parameters used to construct the transaction.
+   * @returns the signed Pact Command and the public key of the signer.
    */
   async signTransferCrossChainTx(
     params: TransferCrossChainTxParams
   ): Promise<BuildTransactionResult> {
-    const signature = await this.signTxInternal(params, 2);
-    return signature;
+    if (params.chainId == params.recipient_chainId)
+      throw new TypeError("Recipient chainId is same as sender's in a cross-chain transfer");
+    return await this.signTxInternal(params, 2);
   }
 
   private async signTxInternal(
@@ -133,13 +149,36 @@ export default class Kadena extends Common {
   ): Promise<BuildTransactionResult> {
     // Use defaults if value not specified
     const t: Date = new Date();
+
     const path = params.path === undefined? "44'/626'/0'/0/0": params.path;
+    if (!(path.startsWith("44'/626'/") || path.startsWith("m/44'/626'/")))
+      throw new TypeError("Path does not start with `44'/626'/` or `m/44'/626'/`");
+
     const recipient = params.recipient.startsWith('k:') ? params.recipient.substring(2) : params.recipient;
+    if (!recipient.match(/[0-9A-Fa-f]{64}/g))
+      throw new TypeError("Recipient should be a hex encoded pubkey or 'k:' address");
+
+    const namespace_ = params.namespace === undefined? "": params.namespace;
+    const module_ = params.module === undefined? "": params.module;
+    if (namespace_ != "" && module_ == "") throw new TypeError("Along with 'namespace' 'module' need to be specified");
+
+    let isNaN_ = (v) => {
+      if (v === undefined) return false;
+      return (isNaN(v as unknown as number));
+    }
+    if (isNaN_(params.amount)) throw new TypeError("amount is non a number");
+    if (isNaN_(params.gasPrice)) throw new TypeError("gasPrice is non a number");
+    if (isNaN_(params.gasLimit)) throw new TypeError("gasLimit is non a number");
+    if (isNaN_(params.creationTime)) throw new TypeError("creationTime is non a number");
+    if (isNaN_(params.ttl)) throw new TypeError("ttl is non a number");
+
+    const amount = convertDecimal(params.amount);
     const gasPrice = params.gasPrice === undefined? "1.0e-6": params.gasPrice;
     const gasLimit = params.gasLimit === undefined? "2300" : params.gasLimit;
     const creationTime = params.creationTime === undefined? Math.floor(t.getTime() / 1000) : params.creationTime;
     const ttl = params.ttl === undefined? "600" : params.ttl;
-    const nonce = params.nonce === undefined? t.toISOString(): params.nonce;
+
+    const nonce = params.nonce === undefined? "": params.nonce;
     // Do APDU call
     const paths = splitPath(path);
     const cla = 0x00;
@@ -155,7 +194,9 @@ export default class Kadena extends Common {
        , textPayload(recipient)
        , textPayload(params.recipient_chainId.toString())
        , textPayload(params.network)
-       , textPayload(params.amount)
+       , textPayload(amount)
+       , textPayload(namespace_)
+       , textPayload(module_)
        , textPayload(gasPrice)
        , textPayload(gasLimit)
        , textPayload(creationTime.toString())
@@ -171,41 +212,77 @@ export default class Kadena extends Common {
     var cmd = "{\"networkId\":\"" + params.network + "\"";
     if (txType == 0) {
       cmd += ",\"payload\":{\"exec\":{\"data\":{},\"code\":\"";
-      cmd += "(coin.transfer \\\"k:" + pubkey + "\\\"";
+      if (namespace_ == "") {
+        cmd += "(coin.transfer";
+      } else {
+        cmd += "(" + namespace_ + "." + module_ + ".transfer";
+      }
+      cmd += " \\\"k:" + pubkey + "\\\"";
       cmd += " \\\"k:" + recipient + "\\\"";
-      cmd += " " + params.amount + ")\"}}";
+      cmd += " " + amount + ")\"}}";
       cmd += ",\"signers\":[{\"pubKey\":\"" + pubkey + "\"";
-      cmd += ",\"clist\":[{\"args\":[\"k:" + pubkey + "\",\"k:" + recipient + "\"," + params.amount + "],\"name\":\"coin.TRANSFER\"},{\"args\":[],\"name\":\"coin.GAS\"}]}]";
+      cmd += ",\"clist\":[{\"args\":[\"k:" + pubkey + "\",\"k:" + recipient + "\"," + amount + "]"
+      if (namespace_ == "") {
+        cmd += ",\"name\":\"coin.TRANSFER\"},{\"args\":[],\"name\":\"coin.GAS\"}]}]";
+      } else {
+        cmd += ",\"name\":\"" + namespace_ + "." + module_ + ".TRANSFER\"},{\"args\":[],\"name\":\"coin.GAS\"}]}]";
+      }
     } else if (txType == 1) {
       cmd += ",\"payload\":{\"exec\":{\"data\":{";
       cmd += "\"ks\":{\"pred\":\"keys-all\",\"keys\":[\"" + recipient + "\"]}";
       cmd += "},\"code\":\"";
-      cmd += "(coin.transfer-create \\\"k:" + pubkey + "\\\"";
+      if (namespace_ == "") {
+        cmd += "(coin.transfer-create";
+      } else {
+        cmd += "(" + namespace_ + "." + module_ + ".transfer-create";
+      }
+      cmd += " \\\"k:" + pubkey + "\\\"";
       cmd += " \\\"k:" + recipient + "\\\"";
       cmd += " (read-keyset \\\"ks\\\")";
-      cmd += " " + params.amount + ")\"}}";
+      cmd += " " + amount + ")\"}}";
       cmd += ",\"signers\":[{\"pubKey\":\"" + pubkey + "\"";
-      cmd += ",\"clist\":[{\"args\":[\"k:" + pubkey + "\",\"k:" + recipient + "\"," + params.amount + "],\"name\":\"coin.TRANSFER\"},{\"args\":[],\"name\":\"coin.GAS\"}]}]";
+      cmd += ",\"clist\":[{\"args\":[\"k:" + pubkey + "\",\"k:" + recipient + "\"," + amount + "]"
+      if (namespace_ == "") {
+        cmd += ",\"name\":\"coin.TRANSFER\"},{\"args\":[],\"name\":\"coin.GAS\"}]}]";
+      } else {
+        cmd += ",\"name\":\"" + namespace_ + "." + module_ + ".TRANSFER\"},{\"args\":[],\"name\":\"coin.GAS\"}]}]";
+      }
     } else {
       cmd += ",\"payload\":{\"exec\":{\"data\":{";
       cmd += "\"ks\":{\"pred\":\"keys-all\",\"keys\":[\"" + recipient + "\"]}";
       cmd += "},\"code\":\"";
-      cmd += "(coin.transfer-crosschain \\\"k:" + pubkey + "\\\"";
+      if (namespace_ == "") {
+        cmd += "(coin.transfer-crosschain";
+      } else {
+        cmd += "(" + namespace_ + "." + module_ + ".transfer-crosschain";
+      }
+      cmd += " \\\"k:" + pubkey + "\\\"";
       cmd += " \\\"k:" + recipient + "\\\"";
       cmd += " (read-keyset \\\"ks\\\")";
       cmd += " \\\"" + params.recipient_chainId.toString() + "\\\"";
-      cmd += " " + params.amount + ")\"}}";
+      cmd += " " + amount + ")\"}}";
       cmd += ",\"signers\":[{\"pubKey\":\"" + pubkey + "\"";
-      cmd += ",\"clist\":[{\"args\":[\"k:" + pubkey + "\",\"k:" + recipient + "\"," + params.amount + ",\"" + params.recipient_chainId.toString() + "\"],\"name\":\"coin.TRANSFER_XCHAIN\"},{\"args\":[],\"name\":\"coin.GAS\"}]}]";
+      cmd += ",\"clist\":[{\"args\":[\"k:" + pubkey + "\",\"k:" + recipient + "\"," + amount + ",\"" + params.recipient_chainId.toString() + "\"]";
+      if (namespace_ == "") {
+        cmd += ",\"name\":\"coin.TRANSFER_XCHAIN\"},{\"args\":[],\"name\":\"coin.GAS\"}]}]";
+      } else {
+        cmd += ",\"name\":\"" + namespace_ + "." + module_ + ".TRANSFER_XCHAIN\"},{\"args\":[],\"name\":\"coin.GAS\"}]}]";
+      }
     }
     cmd += ",\"meta\":{\"creationTime\":" + creationTime.toString();
     cmd += ",\"ttl\":" + ttl + ",\"gasLimit\":" + gasLimit + ",\"chainId\":\"" + params.chainId.toString() + "\"";
     cmd += ",\"gasPrice\":" + gasPrice + ",\"sender\":\"k:" + pubkey + "\"},\"nonce\":\"" + nonce + "\"}";
 
+    var hash_bytes = blake2b(32).update(Buffer.from(cmd, "utf-8")).digest();
+    // base64url encode, remove padding
+    var hash = Buffer.from(hash_bytes).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
     return {
-      signature,
       pubkey,
-      cmd,
+      pact_command: {
+        cmd,
+        hash,
+        sigs: [{sig: signature}],
+      }
     };
   }
 }
@@ -249,5 +326,14 @@ function textPayload(txt: string): Buffer {
   payload[0] = txt.length
   payload.write(txt, 1, "utf-8");
   return payload
+}
+
+const convertDecimal = (decimal) => {
+  decimal = decimal.toString();
+  if (decimal.includes('.')) { return decimal }
+  if ((decimal / Math.floor(decimal)) === 1) {
+    decimal = decimal + ".0"
+  }
+  return decimal
 }
 
