@@ -15,7 +15,7 @@
  *  limitations under the License.
  ********************************************************************************/
 import type Transport from "@ledgerhq/hw-transport";
-import { Common, GetPublicKeyResult, SignTransactionResult, GetVersionResult } from "hw-app-obsidian-common";
+import { Common, GetPublicKeyResult, SignTransactionResult, GetVersionResult } from "hw-app-alamgu";
 import blake2b from "blake2b";
 
 export { GetPublicKeyResult, SignTransactionResult, GetVersionResult, blake2b };
@@ -94,7 +94,7 @@ export default class Kadena extends Common {
       // These are just squashed together
       const payload = Buffer.concat([rawHash, bip32KeyPayload])
       const response = await this.sendChunks(cla, ins, p1, p2, payload);
-      const signature = response.slice(0,-2).toString("hex");
+      const signature = response.slice(0,-2);
       return {
         signature,
       };

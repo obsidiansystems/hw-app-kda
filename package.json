@@ -32,7 +32,7 @@
   "dependencies": {
     "@ledgerhq/hw-transport": "^6.3.0",
     "blake2b": "^2.1.4",
-    "hw-app-obsidian-common": "git+http://github.com/obsidiansystems/hw-app-obsidian-common#46376b351e3f917976c9cad880f6bf9dd1bc9392"
+    "hw-app-alamgu": "git+https://github.com/alamgu/hw-app-alamgu#6822e963dd4a92d50929bd8a3b750c90973504b3"
   },
   "scripts": {
     "build": "tsc && tsc -m ES6 --outDir lib-es",
