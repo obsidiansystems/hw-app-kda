@@ -93,8 +93,7 @@ export default class Kadena extends Common {
       const bip32KeyPayload = buildBip32KeyPayload(path);
       // These are just squashed together
       const payload = Buffer.concat([rawHash, bip32KeyPayload])
-      const response = await this.sendChunks(cla, ins, p1, p2, payload);
-      const signature = response.slice(0,-2);
+      const signature = await this.sendChunks(cla, ins, p1, p2, payload);
       return {
         signature,
       };
